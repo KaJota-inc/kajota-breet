@@ -1,0 +1,25 @@
+# Real env values stay local; .env.breet.example is the committed template.
+.env
+.env.*
+!.env.*.example
+
+# macOS
+.DS_Store
+
+# Node / mobile build artefacts
+node_modules/
+.expo/
+dist/
+*.tsbuildinfo
+
+# Java / Maven build artefacts
+target/
+.classpath
+.settings/
+.project
+*.iml
+.idea/
+
+# IDE
+.vscode/
+*.swp
