@@ -96,12 +96,29 @@ Production wires Spring Security to exempt `/api/v1/webhooks/breet/**` from JWT 
 See `.env.breet.example`. The integration needs:
 
 ```sh
-BREET_API_KEY=                # from breet.io/developers
-BREET_WEBHOOK_SECRET=         # from the same dashboard
-BREET_API_BASE=https://api.breet.io
+BREET_APP_ID=                 # from dashboard.breet.io → Developers → API Credentials
+BREET_APP_SECRET=             # paired secret, same screen
+BREET_ENV=development         # or "production" — picks which env routes
+BREET_API_BASE=https://api.breet.io/v1
+BREET_WEBHOOK_SECRET=         # webhook signing secret, same screen
 BREET_SETTLEMENT_CURRENCY=NGN
 BREET_WEBHOOK_URL=            # public URL the backend exposes /webhooks/breet/deposit at
 ```
+
+### Breet auth model
+
+Breet uses **three** headers on every request — verified against
+[their docs](https://docs.breet.io/api-reference/introduction):
+
+| Header | Source | Purpose |
+|---|---|---|
+| `x-app-id` | `BREET_APP_ID` | Long-lived application identifier |
+| `x-app-secret` | `BREET_APP_SECRET` | Paired secret (treat like a private key) |
+| `X-Breet-Env` | `BREET_ENV` | `development` or `production`. Missing/invalid → 400 |
+
+All three are server-side. The mobile never holds them — `BreetController` (Spring Boot) is the only place that has them in process memory, and forwards them when proxying calls to `https://api.breet.io/v1`.
+
+Webhook auth is separate: Breet posts to the backend with an `X-Breet-Signature` header carrying an HMAC-SHA256 hex digest of the raw body keyed by `BREET_WEBHOOK_SECRET`. The backend verifies before any wallet credit (`BreetSignatureVerifier`).
 
 ## Demo flow
 
