@@ -152,7 +152,7 @@ ADDR_ID="<paste the addressId surfaced in the modal>"
 PAYLOAD='{"addressId":"'"$ADDR_ID"'","coin":"USDT","amountCrypto":"50.00","amountSettled":"82500.00","settlementCurrency":"NGN","txHash":"0xstubdemo","detectedAt":"2026-06-15T12:00:00Z"}'
 SIG=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" -r | awk '{print $1}')
 
-curl -X POST http://localhost:8080/api/v1/webhooks/breet/deposit \
+curl -X POST http://localhost:9082/api/v1/webhooks/breet/deposit \
   -H "Content-Type: application/json" \
   -H "X-Breet-Signature: $SIG" \
   --data-raw "$PAYLOAD"
