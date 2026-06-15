@@ -118,13 +118,20 @@ the full integration without burning real Breet quota.
 #### One-time prep (off-camera, before recording)
 
 ```sh
-# Terminal 1 — backend in dev profile (non-prod → stub impl active)
-export BREET_WEBHOOK_SECRET="demo-secret-do-not-use-in-prod"
-cd backend && SPRING_PROFILES_ACTIVE=dev mvn spring-boot:run
+# Terminal 1 — standalone Breet demo backend (no Mongo/AWS/Stripe needed)
+cd backend-demo && BREET_WEBHOOK_SECRET="demo-secret-do-not-use-in-prod" ./mvnw spring-boot:run
+# → boots in ~0.8 seconds on :9082, stub service always active
 
 # Terminal 2 — mobile in Expo simulator
 cd mobile && npx expo start --ios
 ```
+
+`backend-demo/` is a standalone Spring Boot app that mirrors the
+production Breet controllers + stub service + HMAC verifier, with
+none of the production backend's Mongo / AWS / Stripe dependencies.
+Same classes — `BreetController`, `BreetWebhookController`,
+`BreetServiceStubImpl`, `BreetSignatureVerifier` — boot in under a
+second, no env-var hunt.
 
 Have Loom desktop ready in **Screen + Cam** mode with a script-time
 buffer of ~2 min, 1080p.
@@ -149,7 +156,7 @@ bytes. Computing the signature inline keeps the demo clean:
 ```sh
 SECRET="demo-secret-do-not-use-in-prod"
 ADDR_ID="<paste the addressId surfaced in the modal>"
-PAYLOAD='{"addressId":"'"$ADDR_ID"'","coin":"USDT","amountCrypto":"50.00","amountSettled":"82500.00","settlementCurrency":"NGN","txHash":"0xstubdemo","detectedAt":"2026-06-15T12:00:00Z"}'
+PAYLOAD='{"event":"deposit.settled","addressId":"'"$ADDR_ID"'","coin":"USDT-TRC20","amountCrypto":"50.00","amountSettled":"82500.00","settlementCurrency":"NGN","txHash":"0xstubdemo","reference":"order-loom-demo","detectedAt":1781544000000}'
 SIG=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" -r | awk '{print $1}')
 
 curl -X POST http://localhost:9082/api/v1/webhooks/breet/deposit \
@@ -159,6 +166,10 @@ curl -X POST http://localhost:9082/api/v1/webhooks/breet/deposit \
 ```
 
 Returns `200 OK`. Mobile poll picks it up on the next tick.
+
+`detectedAt` is **epoch milliseconds (Long)**, not ISO string — Jackson
+returns 400 on string formats. Verified end-to-end against
+`backend-demo` during the dry-run.
 
 #### Recording tips
 

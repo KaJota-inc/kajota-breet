@@ -1,0 +1,14 @@
+server:
+  port: 9082
+
+spring:
+  application:
+    name: kajota-breet-demo
+
+breet:
+  webhook-secret: ${BREET_WEBHOOK_SECRET:demo-secret-do-not-use-in-prod}
+
+logging:
+  level:
+    com.kajota: DEBUG
+    org.springframework.web: INFO
