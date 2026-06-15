@@ -83,7 +83,14 @@ config change.
 
 [insert Loom URL — 2 minutes maximum]
 
-Script:
+Two scripts below. **Pick A if you have the Breet unique code in
+hand** (real testnet deposit). **Pick B if recording before Breet
+provisions credentials** — the integration runs end-to-end against
+the in-memory stub with a curl-fired webhook standing in for Breet's
+delivery.
+
+### A — real crypto path (preferred, needs Breet credentials)
+
 1. **0:00–0:15** KaJota app open on FundWallet, existing Stripe rail
    visible (existing surface).
 2. **0:15–0:30** Tap the new **"Pay with crypto"** tile. Modal
@@ -98,6 +105,68 @@ Script:
 6. **1:50–2:00** Outro: "Breet's API integrated end-to-end —
    stablecoin on-ramp for African users, no chargebacks, settles in
    seconds."
+
+### B — stub-mode recording recipe (no Breet credentials required)
+
+The backend's `BreetServiceStubImpl` is `@Profile("!prod")` — it
+generates fake addresses and records fake settled deposits the moment
+a webhook lands. The mobile state machine, the HMAC verifier, and the
+wallet-credit code paths are the **same code that runs in prod**;
+only the upstream HTTP client is swapped out. This script demonstrates
+the full integration without burning real Breet quota.
+
+#### One-time prep (off-camera, before recording)
+
+```sh
+# Terminal 1 — backend in dev profile (non-prod → stub impl active)
+export BREET_WEBHOOK_SECRET="demo-secret-do-not-use-in-prod"
+cd backend && SPRING_PROFILES_ACTIVE=dev mvn spring-boot:run
+
+# Terminal 2 — mobile in Expo simulator
+cd mobile && npx expo start --ios
+```
+
+Have Loom desktop ready in **Screen + Cam** mode with a script-time
+buffer of ~2 min, 1080p.
+
+#### Scene-by-scene (target 2:00 total)
+
+| Time | Window | What happens | Voiceover |
+|---|---|---|---|
+| **0:00–0:10** | Simulator | Open KaJota → FundWallet screen. Card-funding tile visible. | "KaJota is a Nigerian e-commerce wallet. Today, users fund with Stripe — fine for diaspora, friction for everyone else." |
+| **0:10–0:25** | Simulator | Tap the new **Pay with crypto** tile. Modal opens, spinner → fresh `STUB...` address appears with copy button + amount + status pill (`awaiting`). | "We added a Breet-powered stablecoin on-ramp. One tap and the user gets a per-deposit address. The mobile never touches Breet's API key — the backend proxies." |
+| **0:25–0:50** | IDE / split-pane | Briefly show `services/breet/useBreetDeposit.ts` — highlight the state machine (`awaiting → detected → settled → expired`). Then show `BreetSignatureVerifier.java` — highlight `MessageDigest.isEqual` constant-time compare. | "The state machine is extracted into a pure async core so the lifecycle is testable without a renderer. Webhook auth is HMAC-SHA256, constant-time compared — no timing leaks." |
+| **0:50–1:20** | Terminal 3 | Fire the simulated Breet webhook with a valid signature. Modal in simulator updates **live**: `awaiting → detected → settled`. | "I'll simulate Breet's webhook with curl. Note the signature header — same HMAC the controller will verify." |
+| **1:20–1:35** | Simulator | Settled state shows amount, NGN equivalent, tx hash. Tap Done. FundWallet shows wallet balance ticked up. | "Mobile polls, the stub returns the settled deposit, wallet credits. Same code path that runs in prod against the real Breet API." |
+| **1:35–1:55** | Terminal | Run `npx jest mobile/services/breet` (13/13 green) and `mvn -pl backend test -Dtest=BreetSignatureVerifierTest` (9/9 green). | "Thirteen mobile tests on the state machine plus client. Nine backend tests on the signature verifier including RFC 4231 vector one. Both pass clean." |
+| **1:55–2:00** | Outro card | `github.com/KaJota-inc/kajota-breet` + KaJota logo. | "KaJota × Breet. Stablecoin on-ramp for African users, end-to-end." |
+
+#### The curl one-liner (Terminal 3)
+
+The webhook controller verifies the HMAC against the **raw** body
+bytes. Computing the signature inline keeps the demo clean:
+
+```sh
+SECRET="demo-secret-do-not-use-in-prod"
+ADDR_ID="<paste the addressId surfaced in the modal>"
+PAYLOAD='{"addressId":"'"$ADDR_ID"'","coin":"USDT","amountCrypto":"50.00","amountSettled":"82500.00","settlementCurrency":"NGN","txHash":"0xstubdemo","detectedAt":"2026-06-15T12:00:00Z"}'
+SIG=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" -r | awk '{print $1}')
+
+curl -X POST http://localhost:8080/api/v1/webhooks/breet/deposit \
+  -H "Content-Type: application/json" \
+  -H "X-Breet-Signature: $SIG" \
+  --data-raw "$PAYLOAD"
+```
+
+Returns `200 OK`. Mobile poll picks it up on the next tick.
+
+#### Recording tips
+
+- **Do a dry run first** so you know exactly where each tap lands and the curl one-liner doesn't fumble live.
+- **Speak to the integration**, not the slideware — the grant rewards real code shipping against the real API. Calling out the stub-mode swap explicitly is a feature, not a hedge.
+- **Voiceover in post** beats live narration if you fluff a take — Loom's edit panel can re-cut.
+- **Keep the camera bubble small** (bottom-right) so the simulator screen stays the focus.
+- **Caption the URL** in the outro frame so judges can copy the repo without scrubbing.
 
 ---
 
