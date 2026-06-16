@@ -83,11 +83,22 @@ config change.
 
 [insert Loom URL — 2 minutes maximum]
 
-Two scripts below. **Pick A if you have the Breet unique code in
-hand** (real testnet deposit). **Pick B if recording before Breet
-provisions credentials** — the integration runs end-to-end against
-the in-memory stub with a curl-fired webhook standing in for Breet's
-delivery.
+Three scripts below.
+
+- **A — real crypto path.** Highest fidelity; needs the Breet unique
+  code in hand and a real testnet deposit. Mobile sim drives the
+  whole flow.
+- **B — stub-mode mobile.** Mobile sim drives the flow, but the
+  backend is `backend-demo` (no Breet credentials) and the webhook is
+  curl-fired with HMAC computed inline. Same code on both sides of
+  the wire — only Breet's upstream is swapped.
+- **C — code-walkthrough (no mobile sim).** Demo runs entirely in
+  IDE + terminal: `backend-demo` boots live on `:9082`, real curl
+  fires real HMAC-signed webhooks, tests pass green on screen. Mobile
+  side is shown via the source files (`BreetDepositModal.tsx` is the
+  UI spec). Use this when the mobile dev environment can't be brought
+  up in time (e.g. branch on an older Expo SDK than your installed
+  dev-client).
 
 ### A — real crypto path (preferred, needs Breet credentials)
 
@@ -178,6 +189,62 @@ returns 400 on string formats. Verified end-to-end against
 - **Voiceover in post** beats live narration if you fluff a take — Loom's edit panel can re-cut.
 - **Keep the camera bubble small** (bottom-right) so the simulator screen stays the focus.
 - **Caption the URL** in the outro frame so judges can copy the repo without scrubbing.
+
+### C — code-walkthrough recipe (no mobile sim needed)
+
+The full integration is provable end-to-end without booting the
+React Native app. `backend-demo` runs the exact same controllers +
+service + HMAC verifier that ship in the production hackathon/breet
+branch, in under a second. The mobile UI is fully visible as source:
+`BreetDepositModal.tsx` IS the spec for what the user sees, and the
+13/13 jest tests on `useBreetDeposit.ts` prove the state machine
+behaves correctly without needing to render it.
+
+Reach for this when the mobile dev environment can't be brought up
+in time — e.g. the hackathon branch is on Expo SDK 49 but your
+installed dev-client was built from a SDK 53 branch (native module
+ABI mismatch), or you don't have time to do a fresh `expo run:ios` /
+`expo run:android` build.
+
+#### One-time prep (off-camera)
+
+```sh
+# Terminal 1 — backend-demo live
+cd backend-demo && BREET_WEBHOOK_SECRET="demo-secret-do-not-use-in-prod" ./mvnw spring-boot:run
+
+# IDE — open kajota-breet repo, have these tabs ready (Cmd+P targets):
+#   mobile/BreetDepositModal.tsx                ← UI spec
+#   mobile/services/breet/useBreetDeposit.ts    ← state machine
+#   mobile/services/breet/client.ts             ← HTTP client
+#   backend-demo/.../util/breet/BreetSignatureVerifier.java  ← HMAC verifier
+#   backend-demo/.../controller/breet/BreetWebhookController.java  ← raw-bytes verify-then-credit
+#   backend-demo/.../service/breet/BreetServiceStubImpl.java  ← stub impl
+```
+
+#### Scene-by-scene (target ~2:00 total)
+
+| Time | Window | What happens | Voiceover |
+|---|---|---|---|
+| **0:00–0:10** | Browser / repo README | Show the [kajota-breet GitHub repo README](https://github.com/KaJota-inc/kajota-breet). Hover the architecture diagram. | "KaJota is a Nigerian e-commerce wallet. We added a Breet-powered stablecoin on-ramp so users can fund their NGN wallet with USDT/USDC. Mobile + Spring Boot backend, both in this repo." |
+| **0:10–0:30** | IDE — `BreetDepositModal.tsx` | Scroll through the modal source. Highlight the status pill states (`awaiting / detected / settled / expired`) and the address + copy button. | "This is the modal. The user taps Pay with crypto in FundWallet, it generates an address via our backend, polls for settlement, transitions through these four states." |
+| **0:30–0:50** | IDE — `useBreetDeposit.ts` | Highlight `runBreetDeposit` (pure async core extracted from the hook for testability). Show the state-machine transitions. | "The lifecycle's in a pure async function, not buried in a React hook. Means we can test the state machine without a renderer — thirteen jest tests cover it." |
+| **0:50–1:10** | Terminal — `npx jest mobile/services/breet` | Run jest from a clone of the repo. Show the 13/13 pass. | "Cache hits, transient errors, cancellation, expiration — all green." |
+| **1:10–1:30** | IDE — `BreetSignatureVerifier.java` | Highlight `MessageDigest.isEqual` (constant-time compare). Switch to `BreetWebhookController.java`, highlight `@RequestBody byte[] rawBody` (raw bytes, not Jackson-deserialised — so we sign over what Breet signed). | "Webhook auth is HMAC-SHA256, constant-time compared — no timing leaks. The controller reads raw bytes, not parsed JSON, so the signature is over exactly what Breet signed." |
+| **1:30–1:50** | Terminal — backend-demo live + curl | One window: `backend-demo` log streaming. Other window: fire the SUBMISSION.md curl one-liner. Show backend log line `breet stub: webhook recorded settled deposit`. Run `mvn test -Dtest=BreetSignatureVerifierTest`, show 9/9. Run the same curl with a tampered payload, show `401`. | "Backend's live on :9082. Real curl, real HMAC, real 200 OK. Nine RFC 4231 verifier tests pass. Tamper the payload and the verifier rejects — 401, exactly the path that would block a forged webhook in production." |
+| **1:50–2:00** | Outro card | `github.com/KaJota-inc/kajota-breet` + KaJota logo. | "KaJota × Breet. Stablecoin on-ramp for African users, end-to-end. Code is on GitHub — clone and run the tests yourself." |
+
+#### Why this version is fine for grant judging
+
+Grants reward **demonstrably real integration code** that a judge can
+clone and run. Script C gives them:
+
+- Working `backend-demo` they can boot in under a second
+- HMAC-signed webhook they can hit with curl from the README
+- 22 tests they can run locally and watch pass
+- All the source files they'd want to inspect
+
+A live mobile UI is icing — useful, but not the load-bearing part of
+"this integration is real."
 
 ---
 
